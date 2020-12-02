@@ -1,0 +1,184 @@
+#+TITLE: Day2 of AOC
+#+PROPERTY: header-args:clojure :session day2
+
+Namespace declaration comes first
+#+begin_src clojure :results output silent
+(ns day2
+  (:require [clojure.string :as str]
+            [clojure.java.io :as io]
+            [clojure.edn :as edn]))
+#+end_src
+
+--- Day 2: Password Philosophy ---
+Your flight departs in a few days from the coastal airport; the easiest way down to the coast from here is via toboggan.
+
+The shopkeeper at the North Pole Toboggan Rental Shop is having a bad day. "Something's wrong with our computers; we can't log in!" You ask if you can take a look.
+
+Their password database seems to be a little corrupted: some of the passwords wouldn't have been allowed by the Official Toboggan Corporate Policy that was in effect when they were chosen.
+
+To try to debug the problem, they have created a list (your puzzle input) of passwords (according to the corrupted database) and the corporate policy when that password was set.
+
+For example, suppose you have the following list:
+
+#+begin_example
+1-3 a: abcde
+1-3 b: cdefg
+2-9 c: ccccccccc
+#+end_example
+
+Each line gives the password policy and then the password. The password policy indicates the lowest and highest number of times a given letter must appear for the password to be valid. For example, 1-3 a means that the password must contain a at least 1 time and at most 3 times.
+
+In the above example, 2 passwords are valid. The middle password, cdefg, is not; it contains no instances of b, but needs at least 1. The first and third passwords are valid: they contain one a or nine c, both within the limits of their respective policies.
+
+How many passwords are valid according to their policies?
+
+#+begin_src clojure
+(def example-input (str/join "\n" ["1-3 a: abcde"
+                                   "1-3 b: cdefg"
+                                   "2-9 c: ccccccccc"]))
+
+#+end_src
+
+#+RESULTS:
+: #'day2/example-input
+: day2=>
+
+#+begin_src clojure
+(re-matches #"(\d+)\-(\d+) ([a-z]): ([a-z]+)" "1-3 a: abcde")
+#+end_src
+
+#+RESULTS:
+: ["1-3 a: abcde" "1" "3" "a" "abcde"]
+
+#+begin_src clojure
+(def line-match #"(\d+)\-(\d+) ([a-z]): ([a-z]+)")
+(defn parse-line [l]
+  (when-let [[_ minimum maximum letter password] (re-matches line-match l)]
+    [(edn/read-string minimum)
+     (edn/read-string maximum)
+     (first letter)
+     password]))
+#+end_src
+
+#+RESULTS:
+| #'day2/line-match |
+
+Let's test out the above:
+#+begin_src clojure
+(parse-line "1-3 b: cdefg")
+#+end_src
+
+
+#+RESULTS:
+: [1 3 b "cdefg"]
+
+Okay, now we can parse lines. Let's parse the whole file:
+
+#+begin_src clojure
+(defn parse-str [str]
+  (->> (str/split str #"\n")
+       (map parse-line)))
+#+end_src
+
+#+RESULTS:
+: #'day2/parse-str
+: day2=>
+
+And make sure it works:
+#+begin_src clojure
+(parse-str example-input)
+#+end_src
+
+#+RESULTS:
+: ([1 3 \a "abcde"] [1 3 \b "cdefg"] [2 9 \c "ccccccccc"])
+: day2=>
+
+Now that we can parse, let's write the function for checking validity:
+
+#+begin_src clojure
+(defn valid? [[minimum maximum letter password]]
+  (<= minimum (count (filter #(= letter %) password)) maximum))
+#+end_src
+
+#+RESULTS:
+: #'day2/valid?
+: day2=>
+
+verify that (only) the middle password in the example is invalid
+#+begin_src clojure
+(map valid? (parse-str example-input))
+#+end_src
+
+#+RESULTS:
+: (true false true)
+: day2=>
+
+#+begin_src clojure
+(count (filter valid? (parse-str example-input)))
+#+end_src
+
+#+RESULTS:
+: 2
+: day2=>
+
+Now let's get the real input
+#+begin_src clojure
+(->> (io/resource "day2.input")
+     slurp
+     parse-str
+     (filter valid?)
+     count)
+#+end_src
+
+#+RESULTS:
+: 506
+: day2=>
+
+--- Part Two ---
+While it appears you validated the passwords correctly, they don't seem to be what the Official Toboggan Corporate Authentication System is expecting.
+
+The shopkeeper suddenly realizes that he just accidentally explained the password policy rules from his old job at the sled rental place down the street! The Official Toboggan Corporate Policy actually works a little differently.
+
+Each policy actually describes two positions in the password, where 1 means the first character, 2 means the second character, and so on. (Be careful; Toboggan Corporate Policies have no concept of "index zero"!) Exactly one of these positions must contain the given letter. Other occurrences of the letter are irrelevant for the purposes of policy enforcement.
+
+Given the same example list from above:
+
+1-3 a: abcde is valid: position 1 contains a and position 3 does not.
+1-3 b: cdefg is invalid: neither position 1 nor position 3 contains b.
+2-9 c: ccccccccc is invalid: both position 2 and position 9 contain c.
+How many passwords are valid according to the new interpretation of the policies?
+
+
+
+#+begin_src clojure
+(defn valid-2? [[n m letter letters]]
+  (let [a (nth letters (dec n))
+        b (nth letters (dec m))]
+    (= (count (filter #(= letter %) [a b])) 1)))
+#+end_src
+
+#+RESULTS:
+
+test it out with example
+#+begin_src clojure
+(->> example-input
+     parse-str
+     (map valid-2?))
+#+end_src
+
+#+RESULTS:
+: (true false false)
+: day2=>
+
+and the real result
+#+begin_src clojure
+(->> (io/resource "day2.input")
+     slurp
+     parse-str
+     (filter valid-2?)
+     count)
+#+end_src
+
+#+RESULTS:
+: 443
+: day2=>
