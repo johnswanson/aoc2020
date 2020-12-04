@@ -1,0 +1,243 @@
+#+TITLE: Day4
+#+PROPERTY: header-args:clojure :session day4 :tangle ../src/day4.clj :results silent :comments org
+
+#+begin_src clojure
+(ns day4
+  (:require [clojure.string :as str]
+            [clojure.java.io :as io]
+            [clojure.edn :as edn]))
+#+end_src
+
+* --- Day 4: Passport Processing ---
+You arrive at the airport only to realize that you grabbed your North Pole Credentials instead of your passport. While these documents are extremely similar, North Pole Credentials aren't issued by a country and therefore aren't actually valid documentation for travel in most of the world.
+
+It seems like you're not the only one having problems, though; a very long line has formed for the automatic passport scanners, and the delay could upset your travel itinerary.
+
+Due to some questionable network security, you realize you might be able to solve both of these problems at the same time.
+
+The automatic passport scanners are slow because they're having trouble detecting which passports have all required fields. The expected fields are as follows:
+
+#+begin_example
+byr (Birth Year)
+iyr (Issue Year)
+eyr (Expiration Year)
+hgt (Height)
+hcl (Hair Color)
+ecl (Eye Color)
+pid (Passport ID)
+cid (Country ID)
+#+end_example
+
+Passport data is validated in batch files (your puzzle input). Each passport is represented as a sequence of key:value pairs separated by spaces or newlines. Passports are separated by blank lines.
+
+Here is an example batch file containing four passports:
+
+#+begin_example
+ecl:gry pid:860033327 eyr:2020 hcl:#fffffd
+byr:1937 iyr:2017 cid:147 hgt:183cm
+
+iyr:2013 ecl:amb cid:350 eyr:2023 pid:028048884
+hcl:#cfa07d byr:1929
+
+hcl:#ae17e1 iyr:2013
+eyr:2024
+ecl:brn pid:760753108 byr:1931
+hgt:179cm
+
+hcl:#cfa07d eyr:2025 pid:166559648
+iyr:2011 ecl:brn hgt:59in
+#+end_example
+
+The first passport is valid - all eight fields are present. The second passport is invalid - it is missing hgt (the Height field).
+
+The third passport is interesting; the only missing field is cid, so it looks like data from North Pole Credentials, not a passport at all! Surely, nobody would mind if you made the system temporarily ignore missing cid fields. Treat this "passport" as valid.
+
+The fourth passport is missing two fields, cid and byr. Missing cid is fine, but missing any other field is not, so this passport is invalid.
+
+According to the above rules, your improved system would report 2 valid passports.
+
+Count the number of valid passports - those that have all required fields. Treat cid as optional. In your batch file, how many passports are valid?
+
+* Parsing
+
+** First, we define a function for parsing a single "word" into a kv pair.
+#+begin_src clojure
+(defmulti parse-value (fn [k v] k))
+(defmethod parse-value :default [_ v]
+  v)
+
+(defmethod parse-value :birth-year [_ v]
+  (edn/read-string v))
+(defmethod parse-value :issue-year [_ v]
+  (edn/read-string v))
+(defmethod parse-value :expiration-year [_ v]
+  (edn/read-string v))
+
+(defmethod parse-value :height [_ v]
+  (let [[match? n t] (re-matches #"(\d+)(\w+)" v)]
+    {:value (when match? (edn/read-string n))
+     :units (when match? t)}))
+
+(defmethod parse-value :eye-color [_ v]
+  (keyword v))
+
+(def str->field
+  {"byr" :birth-year
+   "iyr" :issue-year
+   "eyr" :expiration-year
+   "hgt" :height
+   "hcl" :hair-color
+   "ecl" :eye-color
+   "pid" :passport-id
+   "cid" :country-id})
+
+(defn parse-word [s]
+  (let [[k v] (str/split s #":")]
+    {(str->field k)
+     (when v
+       (parse-value (str->field k) v))}))
+#+end_src
+
+
+It works:
+#+begin_src clojure :results replace verbatim :tangle no
+(parse-word "ecl:gry")
+(parse-word "byr:1980")
+(parse-word "hgt:156cm")
+(parse-word "hgt:")
+(parse-word "hgt:156")
+(parse-word "ecl:brn")
+(parse-word "hcl:#124567")
+#+end_src
+
+#+RESULTS:
+| {:eye-color :gry}                   |
+| {:birth-year 1980}                  |
+| {:height {:value 156, :units "cm"}} |
+| {:height }                          |
+| {:height {:value 15, :units "6"}}   |
+| {:eye-color :brn}                   |
+| {:hair-color "#124567"}             |
+
+
+** Next we define a parsing function that can handle an entire document - which may be multiple lines:
+#+begin_src clojure
+(defn parse-doc [s]
+  (apply merge (map parse-word (str/split s #"[\n ]+"))))
+#+end_src
+
+Make sure it works.
+#+begin_src clojure :results replace verbatim :tangle no
+(parse-doc "ecl:gry pid:860033327 eyr:2020 hcl:#fffffd
+            byr:1937 iyr:2017 cid:147 hgt:183cm")
+#+end_src
+
+#+RESULTS:
+: {:eye-color "gry", :passport-id "860033327", :expiration-year "2020", :hair-color "#fffffd", :birth-year "1937", :issue-year "2017", :country-id "147", :height "183cm"}
+** Finally we define a function that parses an entire input string
+#+begin_src clojure
+(defn parse-str [s]
+  (map parse-doc (str/split s #"\n\n")))
+#+end_src
+
+Make sure it works.
+#+begin_src clojure :results replace verbatim :tangle no
+(parse-str "ecl:gry pid:860033327 eyr:2020 hcl:#fffffd
+byr:1937 iyr:2017 cid:147 hgt:183cm
+
+iyr:2013 ecl:amb cid:350 eyr:2023 pid:028048884
+hcl:#cfa07d byr:1929
+
+hcl:#ae17e1 iyr:2013
+eyr:2024
+ecl:brn pid:760753108 byr:1931
+hgt:179cm
+
+hcl:#cfa07d eyr:2025 pid:166559648
+iyr:2011 ecl:brn hgt:59in")
+
+#+end_src
+
+#+RESULTS:
+: ({:eye-color "gry", :passport-id "860033327", :expiration-year "2020", :hair-color "#fffffd", :birth-year "1937", :issue-year "2017", :country-id "147", :height "183cm"} {:issue-year "2013", :eye-color "amb", :country-id "350", :expiration-year "2023", :passport-id "028048884", :hair-color "#cfa07d", :birth-year "1929"} {:hair-color "#ae17e1", :issue-year "2013", :expiration-year "2024", :eye-color "brn", :passport-id "760753108", :birth-year "1931", :height "179cm"} {:hair-color "#cfa07d", :expiration-year "2025", :passport-id "166559648", :issue-year "2011", :eye-color "brn", :height "59in"})
+
+* Answer Part 1
+** Define some requirements
+#+begin_src clojure
+(def required-fields #{:birth-year
+                       :eye-color
+                       :issue-year
+                       :expiration-year
+                       :height
+                       :hair-color
+                       :passport-id})
+#+end_src
+
+** Define the function to check whether a doc is valid
+#+begin_src clojure
+(defn valid? [d]
+  (every? #(contains? (set (keys d)) %) required-fields))
+#+end_src
+
+#+begin_src clojure :tangle no
+(valid? (parse-doc "ecl:gry pid:860033327 eyr:2020 hcl:#fffffd
+byr:1937 iyr:2017 cid:147 hgt:183cm"))
+#+end_src
+
+** Answer Part 1
+#+begin_src clojure :tangle no
+(def example
+"ecl:gry pid:860033327 eyr:2020 hcl:#fffffd
+byr:1937 iyr:2017 cid:147 hgt:183cm
+
+iyr:2013 ecl:amb cid:350 eyr:2023 pid:028048884
+hcl:#cfa07d byr:1929
+
+hcl:#ae17e1 iyr:2013
+eyr:2024
+ecl:brn pid:760753108 byr:1931
+hgt:179cm
+
+hcl:#cfa07d eyr:2025 pid:166559648
+iyr:2011 ecl:brn hgt:59in")
+
+(count (filter valid? (parse-str example)))
+#+end_src
+
+Answer part 1
+#+begin_src clojure
+(def input (slurp (io/resource "day4-input.txt")))
+(count (filter valid? (parse-str input)))
+#+end_src
+** Define a validity function for part 2
+#+begin_src clojure
+
+(defmulti valid-field? (fn [f _] f))
+(defmethod valid-field? :birth-year [_ v]
+  (and (integer? v) (<= 1920 v 2002)))
+(defmethod valid-field? :issue-year [_ v]
+  (and (integer? v) (<= 2010 v 2020)))
+(defmethod valid-field? :expiration-year [_ v]
+  (and (integer? v) (<= 2020 v 2030)))
+(defmethod valid-field? :height [_ v]
+  (case (:units v)
+    "in" (<= 59 (:value v) 76)
+    "cm" (<= 150 (:value v) 193)
+    false))
+(defmethod valid-field? :hair-color [_ v]
+  (re-matches #"#[0-9a-f]{6}" v))
+(defmethod valid-field? :eye-color [_ v]
+  (contains? #{:amb :blu :brn :gry :grn :hzl :oth} v))
+(defmethod valid-field? :passport-id [_ v]
+  (re-matches #"[0-9]{9}" v))
+(defn valid-document? [d]
+  (every? #(and (get d %)
+                (valid-field? % (get d %))) required-fields))
+#+end_src
+** Answer Part 2
+#+begin_src clojure
+(valid-document?
+ (parse-doc "pid:087499704 hgt:74in ecl:grn iyr:2012 eyr:2030 byr:1980 hcl:#623a2f"))
+(count (filter valid-document? (parse-str example)))
+(count (filter valid-document? (parse-str input)))
+#+end_src
