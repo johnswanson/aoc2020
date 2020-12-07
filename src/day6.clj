@@ -1,6 +1,7 @@
 (ns day6
   (:require [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [util]))
 
 (defn part-1 [groups]
   (->> groups
@@ -23,9 +24,7 @@
 
 (comment
   (def groups (->> "day6-input.txt"
-                   io/resource
-                   io/reader
-                   line-seq
+                   util/input-lines
                    (partition-by empty?)
                    (remove (comp empty? first))))
 
